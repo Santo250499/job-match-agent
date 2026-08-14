@@ -60,6 +60,14 @@ class JobMatchAnalysis(BaseModel):
     """
 
     overall_score: int = Field(ge=0, le=100)
+
+    job_seniority: Literal[
+        "entry",
+        "mid",
+        "senior",
+        "unknown",
+    ] = "unknown"
+
     score_explanation: str = Field(min_length=20)
     summary: str = Field(min_length=20)
 
