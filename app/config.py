@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_mode: Literal["demo", "openai"] = "demo"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
-    app_name: str = "Day 8 Job Match Agent"
+    app_name: str = "AI Job Match Agent"
     max_input_characters: int = Field(default=20_000, ge=1_000, le=100_000)
 
     model_config = SettingsConfigDict(

@@ -42,6 +42,7 @@ COMMON_SKILLS = {
     "problem solving",
     "attention to detail",
     "microsoft office",
+    "microsoft teams",
     "crm",
     "salesforce",
     "xero",
@@ -69,13 +70,73 @@ def normalise_text(text: str) -> str:
 def contains_skill(text: str, skill: str) -> bool:
     """
     Check whether a skill appears as a recognisable phrase.
-
-    Word boundaries reduce accidental matches.
-    For example, "sql" should not match an unrelated longer word.
     """
     escaped_skill = re.escape(skill)
     pattern = rf"(?<![a-z0-9]){escaped_skill}(?![a-z0-9])"
-    return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+    return re.search(
+        pattern,
+        text,
+        flags=re.IGNORECASE,
+    ) is not None
+
+
+def detect_job_seniority(job_description: str) -> str:
+    """
+    Detect an approximate job seniority level from the advertisement.
+
+    The function is deliberately conservative. If the advertisement does not
+    contain enough evidence, it returns 'unknown'.
+    """
+    job = normalise_text(job_description)
+
+    senior_patterns = [
+        r"\bsenior\b",
+        r"\bteam lead\b",
+        r"\blead developer\b",
+        r"\blead analyst\b",
+        r"\blead engineer\b",
+        r"\bmanager\b",
+        r"\bmanagement role\b",
+        r"\bprincipal\b",
+        r"\b5\+?\s*years?\b",
+        r"\bfive\s+years?\b",
+        r"\b6\+?\s*years?\b",
+        r"\bsix\s+years?\b",
+        r"\b7\+?\s*years?\b",
+        r"\bseven\s+years?\b",
+    ]
+
+    mid_patterns = [
+        r"\bmid[- ]level\b",
+        r"\bintermediate\b",
+        r"\b3\+?\s*years?\b",
+        r"\bthree\s+years?\b",
+        r"\b4\+?\s*years?\b",
+        r"\bfour\s+years?\b",
+    ]
+
+    entry_patterns = [
+        r"\bjunior\b",
+        r"\bgraduate\b",
+        r"\bentry[- ]level\b",
+        r"\bentry level\b",
+        r"\btrainee\b",
+        r"\bintern\b",
+        r"\b0[- ]?2\s+years?\b",
+        r"\b1[- ]?2\s+years?\b",
+    ]
+
+    if any(re.search(pattern, job) for pattern in senior_patterns):
+        return "senior"
+
+    if any(re.search(pattern, job) for pattern in mid_patterns):
+        return "mid"
+
+    if any(re.search(pattern, job) for pattern in entry_patterns):
+        return "entry"
+
+    return "unknown"
 
 
 def extract_job_skills(job_description: str) -> list[str]:
@@ -96,9 +157,6 @@ def extract_job_skills(job_description: str) -> list[str]:
 def find_repeated_job_terms(job_description: str) -> list[str]:
     """
     Find frequently repeated meaningful words.
-
-    This is a small demonstration of transparent fallback analysis.
-    It is not intended to replace a complete natural-language model.
     """
     ignored_words = {
         "and",
@@ -130,8 +188,16 @@ def find_repeated_job_terms(job_description: str) -> list[str]:
         "responsibilities",
     }
 
-    words = re.findall(r"\b[a-z][a-z+#.-]{2,}\b", job_description.lower())
-    useful_words = [word for word in words if word not in ignored_words]
+    words = re.findall(
+        r"\b[a-z][a-z+#.-]{2,}\b",
+        job_description.lower(),
+    )
+
+    useful_words = [
+        word
+        for word in words
+        if word not in ignored_words
+    ]
 
     counts = Counter(useful_words)
 
@@ -142,14 +208,18 @@ def find_repeated_job_terms(job_description: str) -> list[str]:
     ]
 
 
-def build_demo_analysis(request: JobMatchRequest) -> JobMatchAnalysis:
+def build_demo_analysis(
+    request: JobMatchRequest,
+) -> JobMatchAnalysis:
     """
-    Produce a deterministic, transparent analysis without calling an AI API.
-
-    This makes the application free to test and suitable for automated tests.
+    Produce a deterministic analysis without calling an AI API.
     """
     resume = normalise_text(request.resume_text)
     job = normalise_text(request.job_description)
+
+    job_seniority = detect_job_seniority(
+        request.job_description
+    )
 
     requested_skills = extract_job_skills(job)
     repeated_terms = find_repeated_job_terms(job)
@@ -169,10 +239,16 @@ def build_demo_analysis(request: JobMatchRequest) -> JobMatchAnalysis:
     missing: list[SkillAssessment] = []
 
     for skill in requested_skills:
-        resume_has_skill = contains_skill(resume, skill)
+        resume_has_skill = contains_skill(
+            resume,
+            skill,
+        )
+
         job_occurrences = len(
             re.findall(
-                rf"(?<![a-z0-9]){re.escape(skill)}(?![a-z0-9])",
+                rf"(?<![a-z0-9])"
+                rf"{re.escape(skill)}"
+                rf"(?![a-z0-9])",
                 job,
             )
         )
@@ -183,53 +259,64 @@ def build_demo_analysis(request: JobMatchRequest) -> JobMatchAnalysis:
                     skill=skill.title(),
                     status="matched",
                     evidence=(
-                        f"The résumé contains a direct reference to '{skill}'. "
-                        "The candidate should ensure that the statement includes "
-                        "a real example or result."
+                        f"The résumé contains a direct reference to "
+                        f"'{skill}'. The candidate should ensure that "
+                        "the statement includes a real example or result."
                     ),
                     recommendation=(
-                        "Keep the skill and connect it to a truthful achievement, "
-                        "responsibility or project result."
+                        "Keep the skill and connect it to a truthful "
+                        "achievement, responsibility or project result."
                     ),
                 )
             )
+
         elif job_occurrences >= 2:
             missing.append(
                 SkillAssessment(
                     skill=skill.title(),
                     status="missing",
                     evidence=(
-                        f"The job description emphasises '{skill}', but no direct "
-                        "evidence was found in the résumé."
+                        f"The job description emphasises '{skill}', "
+                        "but no direct evidence was found in the résumé."
                     ),
                     recommendation=(
-                        "Add this skill only when it is genuinely supported by "
-                        "your experience. Otherwise, identify it as a development area."
+                        "Add this skill only when it is genuinely "
+                        "supported by your experience. Otherwise, "
+                        "identify it as a development area."
                     ),
                 )
             )
+
         else:
             partial.append(
                 SkillAssessment(
                     skill=skill.title(),
                     status="partial",
                     evidence=(
-                        f"The job description mentions '{skill}', but the résumé "
-                        "does not state it clearly enough for automatic matching."
+                        f"The job description mentions '{skill}', "
+                        "but the résumé does not state it clearly "
+                        "enough for automatic matching."
                     ),
                     recommendation=(
-                        "Review your real experience for related evidence and use "
-                        "clear wording without exaggerating your capability."
+                        "Review your real experience for related "
+                        "evidence and use clear wording without "
+                        "exaggerating your capability."
                     ),
                 )
             )
 
-    total_requirements = max(len(requested_skills), 1)
+    total_requirements = max(
+        len(requested_skills),
+        1,
+    )
 
     matched_points = len(matched) * 1.0
     partial_points = len(partial) * 0.4
 
-    skill_score = ((matched_points + partial_points) / total_requirements) * 70
+    skill_score = (
+        (matched_points + partial_points)
+        / total_requirements
+    ) * 70
 
     completeness_score = 0
 
@@ -251,87 +338,126 @@ def build_demo_analysis(request: JobMatchRequest) -> JobMatchAnalysis:
     ):
         completeness_score += 10
 
-    if re.search(r"\b\d+([.%+]|\s?(years?|months?|clients?|projects?))\b", resume):
+    if re.search(
+        r"\b\d+([.%+]|\s?(years?|months?|clients?|projects?))\b",
+        resume,
+    ):
         completeness_score += 10
 
-    overall_score = round(min(skill_score + completeness_score, 100))
+    overall_score = round(
+        min(
+            skill_score + completeness_score,
+            100,
+        )
+    )
 
     actions: list[str] = []
 
     if missing:
         actions.append(
-            "Review the missing requirements and add only those supported by "
-            "your real work, study, volunteering or project experience."
+            "Review the missing requirements and add only those "
+            "supported by your real work, study, volunteering "
+            "or project experience."
         )
 
     if partial:
         actions.append(
-            "Replace vague skill claims with short evidence-based bullet points."
+            "Replace vague skill claims with short "
+            "evidence-based bullet points."
         )
 
     if completeness_score < 20:
         actions.append(
-            "Add measurable and truthful outcomes, such as time saved, volume "
-            "processed, customers supported or errors reduced."
+            "Add measurable and truthful outcomes, such as time "
+            "saved, volume processed, customers supported or "
+            "errors reduced."
         )
 
     actions.extend(
         [
-            "Use wording from the job advertisement only where it accurately "
-            "describes your experience.",
-            "Proofread the final résumé and confirm that every claim can be "
-            "explained in an interview.",
+            (
+                "Use wording from the job advertisement only where "
+                "it accurately describes your experience."
+            ),
+            (
+                "Proofread the final résumé and confirm that every "
+                "claim can be explained in an interview."
+            ),
         ]
     )
 
-    information_to_confirm = []
+    information_to_confirm: list[str] = []
 
-    if not re.search(r"\b\d+([.%+]|\s?(years?|months?|clients?|projects?))\b", resume):
+    if not re.search(
+        r"\b\d+([.%+]|\s?(years?|months?|clients?|projects?))\b",
+        resume,
+    ):
         information_to_confirm.append(
-            "Provide truthful numbers or outcomes for relevant achievements."
+            "Provide truthful numbers or outcomes for "
+            "relevant achievements."
         )
 
-    if "australia" not in resume and request.australian_context:
+    if (
+        "australia" not in resume
+        and request.australian_context
+    ):
         information_to_confirm.append(
-            "Confirm your Australian work rights, location and availability "
-            "before adding them to the application."
+            "Confirm your Australian work rights, location and "
+            "availability before adding them to the application."
         )
 
-    australian_notes = []
+    australian_notes: list[str] = []
 
     if request.australian_context:
         australian_notes = [
             "Use Australian English spelling consistently.",
-            "Include work-rights information only when it is accurate and useful.",
-            "Focus the résumé on evidence relevant to the advertised selection criteria.",
-            "Do not include sensitive personal details that the employer did not request.",
+            (
+                "Include work-rights information only when it is "
+                "accurate and useful."
+            ),
+            (
+                "Focus the résumé on evidence relevant to the "
+                "advertised selection criteria."
+            ),
+            (
+                "Do not include sensitive personal details that "
+                "the employer did not request."
+            ),
         ]
 
     if overall_score >= 80:
         summary = (
-            "The résumé has strong visible alignment with the analysed job "
-            "requirements, subject to manual verification of every claim."
+            "The résumé has strong visible alignment with the "
+            "analysed job requirements, subject to manual "
+            "verification of every claim."
         )
+
     elif overall_score >= 60:
         summary = (
-            "The résumé has moderate alignment but needs clearer evidence and "
-            "more direct coverage of important requirements."
+            "The résumé has moderate alignment but needs clearer "
+            "evidence and more direct coverage of important "
+            "requirements."
         )
+
     else:
         summary = (
-            "The résumé currently shows limited visible alignment with the job "
-            "description and needs targeted, truthful improvement."
+            "The résumé currently shows limited visible alignment "
+            "with the job description and needs targeted, "
+            "truthful improvement."
         )
 
     score_explanation = (
-        f"The demonstration score is {overall_score}/100. Up to 70 points come "
-        "from direct and partial skill alignment. Up to 30 points come from "
-        "résumé completeness, action-focused evidence and measurable outcomes. "
-        "The score is an application-strength indicator, not a promise of employment."
+        f"The demonstration score is {overall_score}/100. "
+        "Up to 70 points come from direct and partial skill "
+        "alignment. Up to 30 points come from résumé "
+        "completeness, action-focused evidence and measurable "
+        "outcomes. The score is an application-strength "
+        "indicator, not a promise of employment."
     )
 
     return JobMatchAnalysis(
         overall_score=overall_score,
+        job_seniority=job_seniority,
         score_explanation=score_explanation,
         summary=summary,
         matched_skills=matched,
@@ -343,7 +469,9 @@ def build_demo_analysis(request: JobMatchRequest) -> JobMatchAnalysis:
     )
 
 
-def build_agent_instructions(australian_context: bool) -> str:
+def build_agent_instructions(
+    australian_context: bool,
+) -> str:
     australian_instruction = (
         """
 Include practical Australian employment-market guidance.
@@ -374,6 +502,15 @@ Critical honesty rules:
 9. Every missing skill must clearly say that no supporting evidence was found.
 10. The score explanation must describe the scoring logic.
 
+Classify job_seniority as exactly one of:
+- entry
+- mid
+- senior
+- unknown
+
+Use the job advertisement itself as evidence.
+Do not assume a seniority level when it is unclear.
+
 Scoring guidance:
 - Relevant skills and requirements: 70 points.
 - Evidence quality and specific achievements: 20 points.
@@ -388,15 +525,18 @@ def build_openai_analysis(
     settings: Settings,
 ) -> JobMatchAnalysis:
     """
-    Ask the external model for a response parsed into JobMatchAnalysis.
+    Ask the external model for a structured response.
     """
     if not settings.openai_api_key:
         raise AgentError(
-            "APP_MODE is set to 'openai', but OPENAI_API_KEY is missing. "
-            "Add the key to your private .env file or change APP_MODE to 'demo'."
+            "APP_MODE is set to 'openai', but OPENAI_API_KEY "
+            "is missing. Add the key to your private .env file "
+            "or change APP_MODE to 'demo'."
         )
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(
+        api_key=settings.openai_api_key
+    )
 
     user_input = f"""
 RÉSUMÉ:
@@ -420,32 +560,34 @@ JOB DESCRIPTION:
 
         if parsed_result is None:
             raise AgentError(
-                "The AI service returned no validated analysis. Try again or "
-                "switch to demonstration mode."
+                "The AI service returned no validated analysis. "
+                "Try again or switch to demonstration mode."
             )
 
         return parsed_result
 
     except AuthenticationError as error:
         raise AgentError(
-            "The AI API rejected the key. Check OPENAI_API_KEY in your private "
-            ".env file."
+            "The AI API rejected the key. Check "
+            "OPENAI_API_KEY in your private .env file."
         ) from error
 
     except APIConnectionError as error:
         raise AgentError(
-            "The application could not connect to the AI service. Check your "
-            "internet connection and try again."
+            "The application could not connect to the AI "
+            "service. Check your internet connection and try again."
         ) from error
 
     except ValidationError as error:
         raise AgentError(
-            "The AI response did not match the required data structure."
+            "The AI response did not match the required "
+            "data structure."
         ) from error
 
     except APIError as error:
         raise AgentError(
-            "The AI service returned an error. Try again later or use demo mode."
+            "The AI service returned an error. Try again later "
+            "or use demo mode."
         ) from error
 
 
@@ -454,12 +596,17 @@ def analyse_job_match(
     settings: Settings,
 ) -> JobMatchAnalysis:
     """
-    Route the request to the correct analysis method.
+    Route the request to the configured analysis method.
     """
     if settings.app_mode == "demo":
         return build_demo_analysis(request)
 
     if settings.app_mode == "openai":
-        return build_openai_analysis(request, settings)
+        return build_openai_analysis(
+            request,
+            settings,
+        )
 
-    raise AgentError("The configured APP_MODE is not supported.")
+    raise AgentError(
+        "The configured APP_MODE is not supported."
+    )
