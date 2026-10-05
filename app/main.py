@@ -15,8 +15,8 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     description=(
-        "A Day 8 bootcamp API that compares résumé text with a job description "
-        "and returns validated structured output."
+        "Compares résumé text with a job description and returns validated "
+        "structured output."
     ),
     version="1.0.0",
 )
@@ -43,7 +43,7 @@ app.add_middleware(
 )
 def root() -> dict[str, str]:
     return {
-        "message": "Day 8 Job Match Agent API is running.",
+        "message": "AI Job Match Agent API is running.",
         "documentation": "/docs",
         "health_check": "/health",
         "analysis_endpoint": "/analyse",
