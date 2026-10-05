@@ -40,6 +40,10 @@ This project turns that problem into a structured workflow:
 - **Automated API tests** using FastAPI's `TestClient` and `pytest`.
 - **Environment-based configuration** so API keys stay outside the source code.
 - **Australian employment context** can be included in the analysis.
+- **Job seniority** classified from the advertisement as entry, mid, senior, or unknown.
+- **Docker image** that runs the API as a non-root user and checks `GET /health`.
+- **GitHub Actions** runs the test suite in demo mode and builds the Docker image. No API key is required.
+- **Local web interface** for pasting a résumé and a job description. The API container does not serve this page.
 - **Responsible-AI guardrail:** the analysis is instructed not to invent skills, employment, qualifications, achievements, or experience.
 
 ## Architecture
@@ -71,6 +75,9 @@ flowchart LR
 | HTTP/client support | HTTPX |
 | Testing | pytest, FastAPI TestClient |
 | API server | Uvicorn |
+| Web interface | React, Vite |
+| Container | Docker |
+| CI | GitHub Actions |
 | Version control | Git / GitHub |
 
 ## Project Structure
@@ -86,11 +93,15 @@ job-match-agent/
 ├── docs/
 │   ├── screenshot-docs.png    # Swagger UI captured in demo mode
 │   └── screenshot-result.png  # Sample /analyse response
+├── frontend/          # Optional local React interface
 ├── tests/
 │   ├── __init__.py
 │   └── test_api.py    # API and validation tests
+├── .github/workflows/ci.yml  # pytest and Docker build
 ├── .env.example       # Safe configuration template
+├── .dockerignore
 ├── .gitignore
+├── Dockerfile         # API image, non-root user, health check
 ├── requirements.txt
 └── README.md
 ```
@@ -109,6 +120,7 @@ job-match-agent/
 The `/analyse` endpoint returns a validated `JobMatchAnalysis` object containing:
 
 - `overall_score`
+- `job_seniority`
 - `score_explanation`
 - `summary`
 - `matched_skills`
@@ -127,7 +139,7 @@ Each skill assessment includes the skill, match status, supporting evidence, and
 
 `APP_MODE=demo`
 
-Demo mode does not call an external AI service. It performs deterministic skill extraction, keyword matching, repeated-term analysis, and transparent scoring. This makes the application free to run and reliable for automated testing.
+Demo mode does not call an external AI service. It performs deterministic skill extraction, keyword matching, repeated-term analysis, job-seniority detection, and transparent scoring. This makes the application free to run and reliable for automated testing.
 
 ### OpenAI mode
 
@@ -206,6 +218,28 @@ Open the interactive API documentation at:
 http://127.0.0.1:8000/docs
 ```
 
+## Run with Docker
+
+The image contains the API only. It does not copy a `.env` file, so the container starts in demo mode.
+
+```bash
+docker build -t job-match-agent .
+docker run --rm -p 8000:8000 job-match-agent
+```
+
+The process runs as a non-root user. `GET /health` is used as the container health check and returns the active mode.
+
+## Web interface
+
+From `frontend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+The page calls `http://localhost:8000` unless `VITE_API_URL` is set. Start the API first. Details are in `frontend/README.md`.
+
 ## Example Request
 
 ```json
@@ -221,6 +255,7 @@ http://127.0.0.1:8000/docs
 ```json
 {
   "overall_score": 78,
+  "job_seniority": "unknown",
   "score_explanation": "The résumé demonstrates several directly relevant skills while some preferred requirements need stronger evidence.",
   "summary": "The candidate shows a solid technical match with opportunities to strengthen several job-specific requirements.",
   "matched_skills": [],
@@ -243,14 +278,18 @@ Run the automated test suite with:
 pytest -q
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs that suite with `APP_MODE=demo`, then builds the Docker image. The workflow does not read or print an API key.
+
 The current test suite verifies:
 
 - the root endpoint responds correctly;
 - the health endpoint reports a valid application mode;
 - analysis returns the required structured fields;
 - résumés that are too short are rejected;
-- identical résumé and job-description inputs are rejected; and
-- missing required fields are rejected.
+- identical résumé and job-description inputs are rejected;
+- missing required fields are rejected;
+- entry-level and senior job advertisements are classified; and
+- Australian employment notes can be turned off.
 
 ## Validation and Reliability
 
@@ -286,21 +325,19 @@ This repository is part of my practical AI and automation portfolio. It demonstr
 - use structured outputs instead of relying on free-form LLM text;
 - design validation and safe error handling;
 - separate secrets and configuration from source code;
-- write automated tests for API behaviour; and
+- write automated tests for API behaviour;
+- run those tests and a Docker build in GitHub Actions; and
 - think about responsible AI, privacy, and human oversight.
 
 ## Roadmap
 
 Potential future improvements include:
 
-- web-based user interface;
 - PDF/DOCX résumé parsing;
 - authentication and user accounts;
 - configurable job-skill taxonomies;
 - database-backed analysis history;
 - evaluation datasets for comparing scoring quality;
-- CI/CD with GitHub Actions;
-- containerisation with Docker;
 - cloud deployment;
 - observability and secure production logging; and
 - additional model/provider support.
