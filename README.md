@@ -4,6 +4,18 @@ A production-style FastAPI application that compares a candidate's résumé with
 
 The project demonstrates practical Generative AI integration, API design, validation, deterministic fallback logic, automated testing, error handling, and responsible-AI principles.
 
+## Demo
+
+These screenshots were captured from the API running in offline demo mode (`APP_MODE=demo`), with no OpenAI API key. The résumé and job description are fictional.
+
+![Swagger documentation for the Job Match Agent](docs/screenshot-docs.png)
+
+Interactive Swagger UI at `/docs`, including `POST /analyse`.
+
+![Sample job-match analysis from POST /analyse](docs/screenshot-result.png)
+
+A demo-mode `POST /analyse` response for a fictional ICT résumé compared with a junior automation analyst role. This run returned a demonstration score of 76, with matched skills such as administration, attention to detail, and automation.
+
 ## Why I Built This
 
 Job seekers often know they have relevant experience but struggle to identify which requirements they already meet, where the gaps are, and how to tailor an application without exaggerating their background.
@@ -71,6 +83,9 @@ job-match-agent/
 │   ├── config.py      # Environment-based application settings
 │   ├── main.py        # FastAPI application and API endpoints
 │   └── schemas.py     # Pydantic request/response models
+├── docs/
+│   ├── screenshot-docs.png    # Swagger UI captured in demo mode
+│   └── screenshot-result.png  # Sample /analyse response
 ├── tests/
 │   ├── __init__.py
 │   └── test_api.py    # API and validation tests
